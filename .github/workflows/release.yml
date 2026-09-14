@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: ./build-app.sh
+
+      - name: Zip app bundle
+        run: |
+          cd .build/release
+          ditto -c -k --sequesterRsrc --keepParent Countdown.app "$GITHUB_WORKSPACE/Countdown-${{ github.ref_name }}.zip"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Countdown-${{ github.ref_name }}.zip
+          generate_release_notes: true
