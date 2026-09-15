@@ -9,6 +9,15 @@ struct Countdown: Codable, Identifiable, Equatable {
     /// Short label shown in the menu bar instead of `title`, when the full
     /// title would be too long for the menu bar's limited width.
     var shortLabel: String?
+    /// The time zone the event's date/time was entered in — e.g. a flight
+    /// departing 10:00 Tokyo time. `date` itself is always an absolute
+    /// instant, so the countdown is correct regardless of where you are;
+    /// this only affects how the target date/time is displayed.
+    var timeZoneIdentifier: String = TimeZone.current.identifier
+
+    var timeZone: TimeZone {
+        TimeZone(identifier: timeZoneIdentifier) ?? .current
+    }
 
     var isPast: Bool {
         date < Date()
@@ -39,15 +48,20 @@ struct Countdown: Codable, Identifiable, Equatable {
         return .green
     }
 
-    private static let dateFormatter: DateFormatter = {
+    private static func dateFormatter(timeZone: TimeZone, includeZone: Bool) -> DateFormatter {
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEE d MMM yyyy"
+        formatter.dateFormat = includeZone ? "EEE d MMM yyyy HH:mm (zzz)" : "EEE d MMM yyyy HH:mm"
         formatter.locale = Locale(identifier: "it_IT")
+        formatter.timeZone = timeZone
         return formatter
-    }()
+    }
 
+    /// The event's date/time, shown in `timeZone`. The zone abbreviation is
+    /// appended only when it differs from the device's own — the common case
+    /// (a local event) stays uncluttered.
     var formattedDate: String {
-        Self.dateFormatter.string(from: date)
+        let includeZone = timeZoneIdentifier != TimeZone.current.identifier
+        return Self.dateFormatter(timeZone: timeZone, includeZone: includeZone).string(from: date)
     }
 
     /// Renders the remaining (or elapsed, if past) time according to `format`.
@@ -77,5 +91,23 @@ struct Countdown: Codable, Identifiable, Equatable {
             }
         }
         return past ? "\(body) fa" : body
+    }
+}
+
+extension Countdown {
+    private enum CodingKeys: String, CodingKey {
+        case id, title, date, format, shortLabel, timeZoneIdentifier
+    }
+
+    /// Custom decoding so JSON saved before `timeZoneIdentifier` existed
+    /// still loads, falling back to the device's current time zone.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try container.decode(String.self, forKey: .title)
+        date = try container.decode(Date.self, forKey: .date)
+        format = try container.decodeIfPresent(CountdownFormat.self, forKey: .format) ?? .adaptive
+        shortLabel = try container.decodeIfPresent(String.self, forKey: .shortLabel)
+        timeZoneIdentifier = try container.decodeIfPresent(String.self, forKey: .timeZoneIdentifier) ?? TimeZone.current.identifier
     }
 }
