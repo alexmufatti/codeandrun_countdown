@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        closeStrayWindows()
 
         let store = CountdownStore()
         self.store = store
@@ -55,6 +56,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// SwiftUI can restore/auto-present the app's only Scene (our empty
+    /// Settings placeholder) at launch via window-state restoration, showing
+    /// a blank "Countdown Settings" window. Close it immediately, and once
+    /// more on the next run loop turn in case the scene finishes setting up
+    /// after this method returns.
+    private func closeStrayWindows() {
+        let closeStray = {
+            // Exclude the status-bar item's own backing window, which also
+            // shows up in NSApp.windows — closing it would kill the menu
+            // bar icon's click handling.
+            NSApp.windows
+                .filter { $0.level != .statusBar }
+                .forEach { $0.close() }
+        }
+        closeStray()
+        DispatchQueue.main.async(execute: closeStray)
+    }
+
     private func showMenu() {
         guard let button = statusItem.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -78,8 +97,15 @@ struct CountdownMenuBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
+        // Empty placeholder: the app is accessory-only and has no real
+        // settings UI, but SwiftUI's App protocol requires at least one
+        // Scene. Strip the default Cmd+, command so this window never
+        // opens on its own.
         Settings {
             EmptyView()
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) { }
         }
     }
 }
